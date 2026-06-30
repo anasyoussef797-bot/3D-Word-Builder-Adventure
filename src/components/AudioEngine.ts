@@ -371,8 +371,14 @@ class AudioEngine {
       try {
         // Direct Client-Side Google Translate TTS URL as a fallback (works perfectly in browsers without CORS block for <audio> elements)
         const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-        const audioDirect = new Audio(directUrl);
+        
+        // Create audio element and set referrerpolicy="no-referrer" to strip the Referer header!
+        // This is crucial for Vercel deployment because Google Translate blocks requests containing third-party Referer headers.
+        const audioDirect = document.createElement('audio');
+        audioDirect.setAttribute('referrerpolicy', 'no-referrer');
+        audioDirect.src = directUrl;
         audioDirect.volume = 0.95;
+
         audioDirect.play().catch(err => {
           console.warn("Direct Client TTS play failed, trying standard SpeechSynthesis:", err);
           this.speakWithSpeechSynthesis(text, lang, pitch, rate);
@@ -386,7 +392,10 @@ class AudioEngine {
     // Try our high-quality server-side proxy
     try {
       const proxyUrl = `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}`;
-      const audioProxy = new Audio(proxyUrl);
+      const audioProxy = document.createElement('audio');
+      // Set referrerpolicy to no-referrer as well for proxy consistency
+      audioProxy.setAttribute('referrerpolicy', 'no-referrer');
+      audioProxy.src = proxyUrl;
       audioProxy.volume = 0.95;
 
       let fallbackTriggered = false;
