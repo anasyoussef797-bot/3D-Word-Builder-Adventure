@@ -363,7 +363,7 @@ class AudioEngine {
     }
   }
 
-  // Speak using the custom server-side TTS proxy with robust fallback to direct client-side Google TTS and Web Speech API
+  // Speak using the custom server-side TTS proxy with robust fallback to CORS proxy, direct client-side Google TTS and Web Speech API
   speak(text: string, lang: 'ar' | 'en' | 'fr' | 'de', pitch = 1.2, rate = 0.85) {
     if (!this.isVoiceEnabled) return;
 
@@ -389,6 +389,36 @@ class AudioEngine {
       }
     };
 
+    const playCorsProxyFallback = () => {
+      try {
+        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+        const corsProxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
+        
+        const audioCors = document.createElement('audio');
+        audioCors.setAttribute('referrerpolicy', 'no-referrer');
+        audioCors.src = corsProxyUrl;
+        audioCors.volume = 0.95;
+
+        let fallbackTriggered = false;
+        const triggerDirectFallback = () => {
+          if (fallbackTriggered) return;
+          fallbackTriggered = true;
+          playDirectFallback();
+        };
+
+        audioCors.addEventListener('error', () => {
+          triggerDirectFallback();
+        });
+
+        audioCors.play().catch(() => {
+          triggerDirectFallback();
+        });
+      } catch (e) {
+        console.warn("CORS Proxy TTS initialization failed, trying Direct Fallback:", e);
+        playDirectFallback();
+      }
+    };
+
     // Try our high-quality server-side proxy
     try {
       const proxyUrl = `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}`;
@@ -402,7 +432,7 @@ class AudioEngine {
       const triggerFallback = () => {
         if (fallbackTriggered) return;
         fallbackTriggered = true;
-        playDirectFallback();
+        playCorsProxyFallback();
       };
 
       audioProxy.addEventListener('error', () => {
@@ -413,8 +443,8 @@ class AudioEngine {
         triggerFallback();
       });
     } catch (error) {
-      console.warn("Server TTS initialization failed, falling back to direct client TTS:", error);
-      playDirectFallback();
+      console.warn("Server TTS initialization failed, falling back to CORS proxy TTS:", error);
+      playCorsProxyFallback();
     }
   }
 
