@@ -363,67 +363,75 @@ class AudioEngine {
     }
   }
 
-  // Speak using the custom server-side TTS proxy with robust fallback to CORS proxy, direct client-side Google TTS and Web Speech API
+  // Speak using the custom server-side TTS proxy with robust fallbacks for Vercel (StreamElements/Amazon Polly, Google Translate with Referrer Stripping, and Web Speech API)
   speak(text: string, lang: 'ar' | 'en' | 'fr' | 'de', pitch = 1.2, rate = 0.85) {
     if (!this.isVoiceEnabled) return;
 
-    const playDirectFallback = () => {
-      try {
-        // Direct Client-Side Google Translate TTS URL as a fallback (works perfectly in browsers without CORS block for <audio> elements)
-        const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-        
-        // Create audio element and set referrerpolicy="no-referrer" to strip the Referer header!
-        // This is crucial for Vercel deployment because Google Translate blocks requests containing third-party Referer headers.
-        const audioDirect = document.createElement('audio');
-        audioDirect.setAttribute('referrerpolicy', 'no-referrer');
-        audioDirect.src = directUrl;
-        audioDirect.volume = 0.95;
+    // Mapping for StreamElements (Amazon Polly) voices
+    const streamElementsVoices = {
+      ar: 'Zeina', // High-quality Arabic Female voice (extremely clear and natural)
+      en: 'Salli', // Clear US English Female voice
+      fr: 'Celine', // French Female voice
+      de: 'Marlene' // German Female voice
+    };
 
-        audioDirect.play().catch(err => {
-          console.warn("Direct Client TTS play failed, trying standard SpeechSynthesis:", err);
-          this.speakWithSpeechSynthesis(text, lang, pitch, rate);
+    const playSpeechSynthesisFallback = () => {
+      this.speakWithSpeechSynthesis(text, lang, pitch, rate);
+    };
+
+    const playGoogleFallback = () => {
+      try {
+        // Direct Client-Side Google Translate TTS URL
+        // (works perfectly because of the <meta name="referrer" content="no-referrer"> in index.html)
+        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+        const audioGoogle = document.createElement('audio');
+        audioGoogle.setAttribute('referrerpolicy', 'no-referrer');
+        audioGoogle.src = googleUrl;
+        audioGoogle.volume = 0.95;
+
+        audioGoogle.play().catch(err => {
+          console.warn("Direct Google TTS play failed, trying standard SpeechSynthesis:", err);
+          playSpeechSynthesisFallback();
         });
       } catch (e) {
-        console.warn("Direct Client TTS initialization failed, trying standard SpeechSynthesis:", e);
-        this.speakWithSpeechSynthesis(text, lang, pitch, rate);
+        console.warn("Direct Google TTS initialization failed, trying standard SpeechSynthesis:", e);
+        playSpeechSynthesisFallback();
       }
     };
 
-    const playCorsProxyFallback = () => {
+    const playStreamElementsFallback = () => {
       try {
-        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-        const corsProxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
-        
-        const audioCors = document.createElement('audio');
-        audioCors.setAttribute('referrerpolicy', 'no-referrer');
-        audioCors.src = corsProxyUrl;
-        audioCors.volume = 0.95;
+        const voice = streamElementsVoices[lang] || 'Zeina';
+        const seUrl = `https://api.streamelements.com/api/v2/speech?voice=${voice}&text=${encodeURIComponent(text)}`;
+        const audioSE = document.createElement('audio');
+        audioSE.setAttribute('referrerpolicy', 'no-referrer');
+        audioSE.src = seUrl;
+        audioSE.volume = 0.95;
 
         let fallbackTriggered = false;
-        const triggerDirectFallback = () => {
+        const triggerGoogleFallback = () => {
           if (fallbackTriggered) return;
           fallbackTriggered = true;
-          playDirectFallback();
+          playGoogleFallback();
         };
 
-        audioCors.addEventListener('error', () => {
-          triggerDirectFallback();
+        audioSE.addEventListener('error', () => {
+          triggerGoogleFallback();
         });
 
-        audioCors.play().catch(() => {
-          triggerDirectFallback();
+        audioSE.play().catch(() => {
+          triggerGoogleFallback();
         });
       } catch (e) {
-        console.warn("CORS Proxy TTS initialization failed, trying Direct Fallback:", e);
-        playDirectFallback();
+        console.warn("StreamElements TTS initialization failed, trying Google TTS:", e);
+        playGoogleFallback();
       }
     };
 
-    // Try our high-quality server-side proxy
+    // Try our high-quality server-side proxy first (for our main dev/production containers)
     try {
       const proxyUrl = `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}`;
       const audioProxy = document.createElement('audio');
-      // Set referrerpolicy to no-referrer as well for proxy consistency
       audioProxy.setAttribute('referrerpolicy', 'no-referrer');
       audioProxy.src = proxyUrl;
       audioProxy.volume = 0.95;
@@ -432,7 +440,7 @@ class AudioEngine {
       const triggerFallback = () => {
         if (fallbackTriggered) return;
         fallbackTriggered = true;
-        playCorsProxyFallback();
+        playStreamElementsFallback(); // Fallback to StreamElements for Vercel/Static hosting
       };
 
       audioProxy.addEventListener('error', () => {
@@ -443,8 +451,8 @@ class AudioEngine {
         triggerFallback();
       });
     } catch (error) {
-      console.warn("Server TTS initialization failed, falling back to CORS proxy TTS:", error);
-      playCorsProxyFallback();
+      console.warn("Server TTS initialization failed, trying StreamElements TTS:", error);
+      playStreamElementsFallback();
     }
   }
 
