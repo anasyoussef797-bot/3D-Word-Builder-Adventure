@@ -1,0 +1,6 @@
+{
+  "name": "3D Word Builder Adventure",
+  "description": "An interactive, highly polished educational 3D word builder game in Arabic, English, French, and German for kids aged 3-6. Game #3 in the Impact Hub Egypt Educational Games Collection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

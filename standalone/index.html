@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Word Builder Adventure - Standalone Offline Game</title>
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Cairo and Inter Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .font-cairo {
+      font-family: 'Cairo', sans-serif;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-12px) rotate(1.5deg); }
+    }
+    .floating-island {
+      animation: float 3.5s ease-in-out infinite;
+    }
+    @keyframes pulse-soft {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.04); opacity: 0.95; }
+    }
+    .pulsing-card {
+      animation: pulse-soft 3s ease-in-out infinite;
+    }
+    /* Simple shake animation */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+    .animate-shake {
+      animation: shake 0.4s ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-teal-50 via-cyan-50 to-emerald-100 flex flex-col justify-between">
+
+  <!-- Background decorative clouds -->
+  <div class="fixed inset-0 pointer-events-none opacity-20 overflow-hidden">
+    <div class="absolute top-[10%] left-[5%] w-32 h-16 bg-white rounded-full blur-sm"></div>
+    <div class="absolute top-[25%] right-[8%] w-48 h-24 bg-white rounded-full blur-sm"></div>
+    <div class="absolute bottom-[20%] left-[12%] w-40 h-20 bg-white rounded-full blur-sm"></div>
+  </div>
+
+  <!-- GAME SCREEN SHELL -->
+  <div id="game-container" class="flex-1 w-full max-w-5xl mx-auto flex flex-col p-4 relative z-10 justify-center">
+    <!-- State screens will be injected here via JavaScript -->
+  </div>
+
+  <!-- Footer Branding -->
+  <footer class="w-full text-center py-4 text-[11px] font-bold text-teal-800/60 uppercase tracking-wider relative z-10 border-t border-teal-100/50 bg-teal-50/20 backdrop-blur-sm">
+    Developed by Impact Hub Egypt • Standalone Educational Edition
+  </footer>
+
+  <!-- STANDALONE CORE ENGINE & ASSETS -->
+  <script>
+    // 1. Level & Translation Database
+    const WORD_LEVELS = {
+      ar: [
+        { id: 1, word: 'تفاحة', translation: 'Apple', visual: 'apple', phonetic: 'تُفَّاحَة' },
+        { id: 2, word: 'أرنب', translation: 'Rabbit', visual: 'rabbit', phonetic: 'أَرْنَب' },
+        { id: 3, word: 'بطة', translation: 'Duck', visual: 'duck', phonetic: 'بَطَّة' }
+      ],
+      en: [
+        { id: 1, word: 'Apple', translation: 'Apple', visual: 'apple', phonetic: 'Apple' },
+        { id: 2, word: 'Rabbit', translation: 'Rabbit', visual: 'rabbit', phonetic: 'Rabbit' },
+        { id: 3, word: 'Duck', translation: 'Duck', visual: 'duck', phonetic: 'Duck' }
+      ],
+      fr: [
+        { id: 1, word: 'Avion', translation: 'Airplane', visual: 'airplane', phonetic: 'Avion' },
+        { id: 2, word: 'Chat', translation: 'Cat', visual: 'cat', phonetic: 'Chat' },
+        { id: 3, word: 'Poisson', translation: 'Fish', visual: 'fish', phonetic: 'Poisson' }
+      ],
+      de: [
+        { id: 1, word: 'Affe', translation: 'Monkey', visual: 'monkey', phonetic: 'Affe' },
+        { id: 2, word: 'Apfel', translation: 'Apple', visual: 'apple', phonetic: 'Apfel' },
+        { id: 3, word: 'Haus', translation: 'House', visual: 'house', phonetic: 'Haus' }
+      ]
+    };
+
+    const TRANSLATIONS = {
+      ar: {
+        title: 'مغامرة بناء الكلمات ثلاثية الأبعاد',
+        subtitle: 'اللعبة الثالثة - إمباكت هب مصر',
+        selectLang: 'اختر لغتك للبدء',
+        instruction: 'اسحب الحروف الملونة إلى مكانها الصحيح لتكوين الكلمة!',
+        success: 'أحسنت صنعاً! ممتاز!',
+        nextLevel: 'المستوى التالي',
+        playAgain: 'العب مجدداً',
+        stars: 'النجوم',
+        level: 'المستوى',
+        congratsTitle: 'بطل الكلمات المذهل!',
+        congratsDesc: 'لقد أكملت جميع مستويات النسخة المستقلة بنجاح وحصلت على وسام إمباكت هب مصر للتعليم!'
+      },
+      en: {
+        title: '3D Word Builder Adventure',
+        subtitle: 'Game #3 - Impact Hub Egypt',
+        selectLang: 'Choose Your Language to Start',
+        instruction: 'Tap the colorful letters into their correct spots to build the word!',
+        success: 'Fantastic Job! Outstanding!',
+        nextLevel: 'Next Level',
+        playAgain: 'Play Again',
+        stars: 'Stars',
+        level: 'Level',
+        congratsTitle: 'Word Adventure Hero!',
+        congratsDesc: 'You have completed all levels and earned the Impact Hub Egypt Educational Badge!'
+      },
+      fr: {
+        title: "Aventure d'Assemblage de Mots 3D",
+        subtitle: 'Jeu #3 - Impact Hub Égypte',
+        selectLang: 'Choisissez votre langue pour commencer',
+        instruction: 'Faites glisser les lettres colorées dans les bonnes cases pour former le mot !',
+        success: 'Excellent travail ! Magnifique !',
+        nextLevel: 'Niveau Suivant',
+        playAgain: 'Rejouer',
+        stars: 'Étoiles',
+        level: 'Niveau',
+        congratsTitle: 'Héros des Mots !',
+        congratsDesc: "Tu as terminé tous les niveaux et remporté le badge éducatif d'Impact Hub Égypte !"
+      },
+      de: {
+        title: '3D-Wortbau-Abenteuer',
+        subtitle: 'Spiel #3 - Impact Hub Ägypten',
+        selectLang: 'Wähle deine Sprache zum Starten',
+        instruction: 'Ziehe die bunten Buchstaben in die richtigen Felder, um das Wort zu bauen!',
+        success: 'Fantastische Arbeit! Ausgezeichnet!',
+        nextLevel: 'Nächstes Level',
+        playAgain: 'Noch einmal spielen',
+        stars: 'Sterne',
+        level: 'Level',
+        congratsTitle: 'Wort-Abenteuer Held!',
+        congratsDesc: 'Du hast alle Level abgeschlossen und das pädagogische Abzeichen des Impact Hub Ägypten erhalten!'
+      }
+    };
+
+    // 2. Audio Synthesizer Engine
+    class AudioSynth {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtxClass) this.ctx = new AudioCtxClass();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playPop() {
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(850, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.08);
+      }
+      playSuccess() {
+        this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        [261, 329, 392, 523].forEach((f, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.frequency.setValueAtTime(f, t + i * 0.07);
+          gain.gain.setValueAtTime(0.1, t + i * 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.07 + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t + i * 0.07);
+          osc.stop(t + i * 0.07 + 0.3);
+        });
+      }
+      playError() {
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(90, this.ctx.currentTime + 0.25);
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+      }
+      speak(text, lang) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang === 'ar' ? 'ar-EG' : lang === 'fr' ? 'fr-FR' : lang === 'de' ? 'de-DE' : 'en-GB';
+        utterance.pitch = 1.25;
+        utterance.rate = 0.85;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+    const audio = new AudioSynth();
+
+    // 3. UI Render Assets (SVGs)
+    const SVG_ASSETS = {
+      apple: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><path d="M100,50 Q105,25 118,20 Q116,40 102,48 Z" fill="#8B4513"/><path d="M105,28 Q130,12 145,28 Q118,38 105,28 Z" fill="#22c55e"/><path d="M100,60 C75,55 35,70 35,115 C35,160 75,175 100,165 C125,175 165,160 165,115 C165,70 125,55 100,60 Z" fill="#ef4444"/><ellipse cx="70" cy="90" rx="12" ry="20" fill="#ffffff" opacity="0.4" transform="rotate(-25 70 90)"/></svg>`,
+      rabbit: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><path d="M75,65 Q65,10 55,15 Q65,65 75,70 Z" fill="#e2e8f0"/><path d="M90,60 Q85,5 75,10 Q80,60 90,65 Z" fill="#e2e8f0"/><ellipse cx="100" cy="135" rx="45" ry="35" fill="#e2e8f0"/><circle cx="115" cy="85" r="28" fill="#f1f5f9"/><circle cx="124" cy="80" r="4.5" fill="#2d3748"/><polygon points="138,87 138,91 134,89" fill="#fda4af"/></svg>`,
+      duck: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><path d="M50,110 C50,150 140,155 140,110 C140,85 115,80 115,80 L105,80 Z" fill="#facc15"/><path d="M100,100 L110,75 C110,75 110,45 128,45 C145,45 145,75 145,75 L135,100 Z" fill="#facc15"/><circle cx="125" cy="58" r="4" fill="#2d3748"/><path d="M138,58 Q165,60 155,72 Z" fill="#ea580c"/></svg>`,
+      monkey: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><circle cx="100" cy="105" r="42" fill="#7c2d12"/><ellipse cx="88" cy="108" rx="20" ry="24" fill="#ffedd5"/><ellipse cx="112" cy="108" rx="20" ry="24" fill="#ffedd5"/><circle cx="88" cy="98" r="4" fill="#2d3748"/><circle cx="112" cy="98" r="4" fill="#2d3748"/><path d="M88,122 Q100,132 112,122" stroke="#451a03" stroke-width="3" fill="none"/></svg>`,
+      house: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><polygon points="100,28 35,80 165,80" fill="#ef4444"/><rect x="48" y="80" width="104" height="80" rx="5" fill="#bae6fd"/><rect x="85" y="115" width="30" height="45" rx="3" fill="#854d0e"/></svg>`,
+      cat: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><ellipse cx="90" cy="130" rx="46" ry="34" fill="#f97316"/><circle cx="120" cy="90" r="28" fill="#f97316"/><polygon points="98,75 106,45 118,68" fill="#f97316"/><polygon points="122,68 134,45 142,75" fill="#f97316"/><circle cx="110" cy="98" r="5" fill="#fecdd3"/></svg>`,
+      airplane: `<svg viewBox="0 0 200 200" class="w-48 h-48 drop-shadow-xl"><path d="M25,100 C25,82 145,65 175,98 C145,130 25,112 25,100 Z" fill="#f1f5f9"/><polygon points="100,105 115,165 135,165 125,105" fill="#0d9488"/></svg>`
+    };
+
+    const TILE_COLORS = [
+      'from-rose-400 to-pink-500 shadow-pink-300',
+      'from-cyan-400 to-blue-500 shadow-blue-300',
+      'from-amber-400 to-orange-500 shadow-orange-300',
+      'from-emerald-400 to-teal-500 shadow-emerald-300',
+      'from-purple-400 to-fuchsia-500 shadow-purple-300'
+    ];
+
+    // 4. Game State
+    let currentLang = 'en';
+    let currentLevelIdx = 0;
+    let stars = 0;
+    let slots = [];
+    let lettersSupply = [];
+    let isSuccessState = false;
+
+    // 5. Render Screens
+    function setScreen(html) {
+      document.getElementById('game-container').innerHTML = html;
+    }
+
+    function initLangSelect() {
+      setScreen(`
+        <div class="text-center space-y-8 max-w-xl mx-auto py-8">
+          <div class="space-y-3">
+            <span class="text-6xl animate-bounce inline-block">👑</span>
+            <h1 class="text-4xl font-extrabold text-slate-800">3D Word Builder</h1>
+            <p class="text-xs font-bold text-teal-700 tracking-wider">GAME #3 • IMPACT HUB EGYPT</p>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <button onclick="selectLang('ar')" class="p-6 bg-white hover:scale-105 rounded-3xl border-2 border-slate-100 shadow-md transition-all text-center cursor-pointer group">
+              <span class="text-4xl">🇪🇬</span>
+              <h3 class="text-lg font-bold text-slate-800 mt-2 font-cairo">العربية</h3>
+            </button>
+            <button onclick="selectLang('en')" class="p-6 bg-white hover:scale-105 rounded-3xl border-2 border-slate-100 shadow-md transition-all text-center cursor-pointer group">
+              <span class="text-4xl">🇬🇧</span>
+              <h3 class="text-lg font-bold text-slate-800 mt-2">English</h3>
+            </button>
+            <button onclick="selectLang('fr')" class="p-6 bg-white hover:scale-105 rounded-3xl border-2 border-slate-100 shadow-md transition-all text-center cursor-pointer group">
+              <span class="text-4xl">🇫🇷</span>
+              <h3 class="text-lg font-bold text-slate-800 mt-2">Français</h3>
+            </button>
+            <button onclick="selectLang('de')" class="p-6 bg-white hover:scale-105 rounded-3xl border-2 border-slate-100 shadow-md transition-all text-center cursor-pointer group">
+              <span class="text-4xl">🇩🇪</span>
+              <h3 class="text-lg font-bold text-slate-800 mt-2">Deutsch</h3>
+            </button>
+          </div>
+        </div>
+      `);
+    }
+
+    function selectLang(lang) {
+      currentLang = lang;
+      currentLevelIdx = 0;
+      stars = 0;
+      audio.init();
+      audio.speak(TRANSLATIONS[lang].title, lang);
+      loadLevel();
+    }
+
+    function loadLevel() {
+      isSuccessState = false;
+      const levels = WORD_LEVELS[currentLang];
+      const currentLevel = levels[currentLevelIdx];
+      const wordChars = Array.from(currentLevel.word);
+
+      // Setup Empty Slots
+      slots = wordChars.map((char, index) => ({
+        index,
+        expectedChar: char,
+        placedLetter: null
+      }));
+
+      // Setup Scrambled Toys
+      lettersSupply = wordChars.map((char, index) => {
+        const randomColor = TILE_COLORS[Math.floor(Math.random() * TILE_COLORS.length)];
+        return {
+          id: `toy-${index}`,
+          char,
+          color: randomColor,
+          isPlaced: false
+        };
+      });
+
+      // Simple Shuffle
+      lettersSupply.sort(() => Math.random() - 0.5);
+
+      renderGameboard();
+    }
+
+    function renderGameboard() {
+      const levels = WORD_LEVELS[currentLang];
+      const currentLevel = levels[currentLevelIdx];
+      const t = TRANSLATIONS[currentLang];
+      const isRTL = currentLang === 'ar';
+
+      const slotsHtml = slots.map(slot => {
+        if (slot.placedLetter) {
+          return `
+            <div onclick="returnLetter(${slot.index})" class="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center rounded-xl bg-gradient-to-b ${slot.placedLetter.color} text-white text-2xl font-bold font-sans shadow-md cursor-pointer hover:scale-105 active:scale-95 transition-all">
+              ${slot.placedLetter.char}
+            </div>
+          `;
+        }
+        return `
+          <div class="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center rounded-xl border-2 border-dashed border-sky-400/50 bg-sky-50/30">
+          </div>
+        `;
+      }).join('');
+
+      const supplyHtml = lettersSupply.filter(toy => !toy.isPlaced).map(toy => {
+        return `
+          <div onclick="tapLetter('${toy.id}')" class="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center rounded-2xl bg-gradient-to-b ${toy.color} text-white text-2xl font-bold font-sans shadow-lg cursor-pointer hover:scale-110 active:scale-95 transition-all relative">
+            ${toy.char}
+            <div class="absolute top-1 right-1 w-2 h-2 rounded-full bg-white/40"></div>
+          </div>
+        `;
+      }).join('');
+
+      setScreen(`
+        <div class="flex-1 flex flex-col items-center justify-between gap-6 py-6 ${isRTL ? 'font-cairo' : ''}" dir="${isRTL ? 'rtl' : 'ltr'}">
+          <!-- TOP ROW BAR -->
+          <div class="w-full flex items-center justify-between bg-white/70 backdrop-blur-md rounded-2xl p-3 border border-white/40 shadow-sm">
+            <button onclick="initLangSelect()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer">
+              🏠 ${isRTL ? 'الرئيسية' : 'Home'}
+            </button>
+            <div class="text-center">
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">${t.level} ${currentLevelIdx + 1} / ${levels.length}</span>
+              <h2 class="text-sm font-black text-teal-800">${currentLevel.translation}</h2>
+            </div>
+            <div class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl border border-amber-100">
+              ⭐ ${stars}
+            </div>
+          </div>
+
+          <!-- FLOATING ISLAND & 3D ART -->
+          <div class="flex flex-col items-center justify-center min-h-[240px] relative w-full my-4">
+            <div class="absolute bottom-4 w-48 h-12 bg-emerald-950/20 rounded-full blur-sm"></div>
+            <div class="absolute bottom-6 w-56 h-14 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full shadow-lg floating-island flex flex-col items-center justify-center">
+              <div class="absolute bottom-[20px] scale-110">
+                ${SVG_ASSETS[currentLevel.visual] || ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- SLOTS ROW -->
+          <div id="slots-container" class="flex justify-center gap-3 py-4 px-6 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/40 shadow-sm">
+            ${slotsHtml}
+          </div>
+
+          <!-- SUPPLY LETTERS -->
+          <div class="w-full max-w-md text-center space-y-3">
+            <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">${isRTL ? 'انقر على الحروف لتكوين الكلمة' : 'Tap letters to build word'}</p>
+            <div class="flex flex-wrap justify-center gap-3 min-h-[80px] p-4 bg-white/10 rounded-2xl border border-white/20">
+              ${supplyHtml}
+            </div>
+          </div>
+
+          <!-- SUCCESS BOTTOM PANEL -->
+          ${isSuccessState ? `
+            <div class="w-full max-w-lg p-5 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white flex items-center justify-between shadow-xl gap-4 animate-bounce">
+              <div>
+                <h3 class="font-bold text-sm">🎉 ${t.success}</h3>
+                <p class="text-[11px] text-teal-100 mt-1">${currentLevel.word} = ${currentLevel.translation}</p>
+              </div>
+              <button onclick="nextLevel()" class="px-4 py-2 bg-white text-teal-800 font-bold rounded-xl text-xs shadow-md hover:bg-teal-50 transition-all cursor-pointer">
+                ${t.nextLevel} →
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `);
+    }
+
+    function tapLetter(toyId) {
+      if (isSuccessState) return;
+      const toy = lettersSupply.find(t => t.id === toyId);
+      if (!toy) return;
+
+      // Find first empty slot that matches expected char
+      const emptySlot = slots.find(s => !s.placedLetter && s.expectedChar.toLowerCase() === toy.char.toLowerCase());
+      
+      if (emptySlot) {
+        audio.playPop();
+        audio.speak(toy.char, currentLang);
+        emptySlot.placedLetter = toy;
+        toy.isPlaced = true;
+        renderGameboard();
+        checkCompletion();
+      } else {
+        // Fallback to absolute first empty slot
+        const firstEmpty = slots.find(s => !s.placedLetter);
+        if (firstEmpty) {
+          audio.playPop();
+          audio.speak(toy.char, currentLang);
+          firstEmpty.placedLetter = toy;
+          toy.isPlaced = true;
+          renderGameboard();
+          checkCompletion();
+        } else {
+          audio.playError();
+          document.getElementById('slots-container').classList.add('animate-shake');
+          setTimeout(() => {
+            document.getElementById('slots-container').classList.remove('animate-shake');
+          }, 500);
+        }
+      }
+    }
+
+    function returnLetter(slotIndex) {
+      if (isSuccessState) return;
+      const slot = slots[slotIndex];
+      if (!slot || !slot.placedLetter) return;
+      
+      audio.playPop();
+      const toy = slot.placedLetter;
+      toy.isPlaced = false;
+      slot.placedLetter = null;
+      renderGameboard();
+    }
+
+    function checkCompletion() {
+      // Check if all slots are filled correctly
+      const isComplete = slots.every(s => s.placedLetter && s.placedLetter.char.toLowerCase() === s.expectedChar.toLowerCase());
+      if (isComplete) {
+        isSuccessState = true;
+        stars += 3;
+        audio.playSuccess();
+        setTimeout(() => {
+          audio.speak(WORD_LEVELS[currentLang][currentLevelIdx].word, currentLang);
+        }, 500);
+        renderGameboard();
+      }
+    }
+
+    function nextLevel() {
+      const levels = WORD_LEVELS[currentLang];
+      if (currentLevelIdx < levels.length - 1) {
+        currentLevelIdx++;
+        loadLevel();
+      } else {
+        renderCongratulations();
+      }
+    }
+
+    function renderCongratulations() {
+      const t = TRANSLATIONS[currentLang];
+      setScreen(`
+        <div class="max-w-md w-full bg-white/90 backdrop-blur-md rounded-3xl p-8 border border-white text-center shadow-2xl space-y-6 mx-auto my-8 ${currentLang === 'ar' ? 'font-cairo' : ''}">
+          <div class="text-7xl">🏆</div>
+          <h2 class="text-3xl font-black text-slate-800">${t.congratsTitle}</h2>
+          <p class="text-sm text-slate-600 px-4">${t.congratsDesc}</p>
+          <div class="p-4 bg-teal-50 rounded-2xl border border-teal-100 inline-block px-8">
+            <span class="text-xs font-bold text-teal-600 uppercase tracking-wider block">Total Stars</span>
+            <span class="text-3xl font-black text-teal-800">⭐ ${stars}</span>
+          </div>
+          <button onclick="initLangSelect()" class="w-full py-3.5 px-6 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-sm shadow-md transition-all cursor-pointer">
+            ${t.playAgain}
+          </button>
+        </div>
+      `);
+    }
+
+    // Launch game on load
+    window.onload = initLangSelect;
+  </script>
+</body>
+</html>
