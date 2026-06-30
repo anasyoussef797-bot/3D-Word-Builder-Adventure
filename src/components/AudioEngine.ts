@@ -363,25 +363,50 @@ class AudioEngine {
     }
   }
 
-  // Speak using the custom server-side TTS proxy with fallback to the local Web Speech API
+  // Speak using the custom server-side TTS proxy with robust fallback to direct client-side Google TTS and Web Speech API
   speak(text: string, lang: 'ar' | 'en' | 'fr' | 'de', pitch = 1.2, rate = 0.85) {
     if (!this.isVoiceEnabled) return;
 
-    // Use our server-side TTS proxy to guarantee beautiful high-quality voices on all devices without CORS or missing voice packs
-    try {
-      const url = `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}`;
-      const audio = new Audio(url);
-      audio.volume = 0.95;
-      audio.play().catch(err => {
-        console.warn("Server TTS play failed, trying fallback standard speech synthesis:", err);
+    const playDirectFallback = () => {
+      try {
+        // Direct Client-Side Google Translate TTS URL as a fallback (works perfectly in browsers without CORS block for <audio> elements)
+        const directUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+        const audioDirect = new Audio(directUrl);
+        audioDirect.volume = 0.95;
+        audioDirect.play().catch(err => {
+          console.warn("Direct Client TTS play failed, trying standard SpeechSynthesis:", err);
+          this.speakWithSpeechSynthesis(text, lang, pitch, rate);
+        });
+      } catch (e) {
+        console.warn("Direct Client TTS initialization failed, trying standard SpeechSynthesis:", e);
         this.speakWithSpeechSynthesis(text, lang, pitch, rate);
-      });
-      return;
-    } catch (error) {
-      console.warn("Server TTS initialization failed, falling back to Web Speech:", error);
-    }
+      }
+    };
 
-    this.speakWithSpeechSynthesis(text, lang, pitch, rate);
+    // Try our high-quality server-side proxy
+    try {
+      const proxyUrl = `/api/tts?lang=${lang}&text=${encodeURIComponent(text)}`;
+      const audioProxy = new Audio(proxyUrl);
+      audioProxy.volume = 0.95;
+
+      let fallbackTriggered = false;
+      const triggerFallback = () => {
+        if (fallbackTriggered) return;
+        fallbackTriggered = true;
+        playDirectFallback();
+      };
+
+      audioProxy.addEventListener('error', () => {
+        triggerFallback();
+      });
+
+      audioProxy.play().catch(() => {
+        triggerFallback();
+      });
+    } catch (error) {
+      console.warn("Server TTS initialization failed, falling back to direct client TTS:", error);
+      playDirectFallback();
+    }
   }
 
   private speakWithSpeechSynthesis(text: string, lang: 'ar' | 'en' | 'fr' | 'de', pitch = 1.2, rate = 0.85) {
